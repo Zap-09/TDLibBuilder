@@ -16,11 +16,11 @@ jobs:
     # -----------------------------
     # 1. Clone TDLib
     # -----------------------------
-    - name: Clone TDLib
+    - name: Clone TDLib (stable commit)
       run: |
-        git clone --depth 1 --branch $TDLIB_TAG https://github.com/tdlib/td.git
+        git clone https://github.com/tdlib/td.git
         cd td
-        git fetch --tags
+        git checkout master
 
     # -----------------------------
     # 2. Java setup
