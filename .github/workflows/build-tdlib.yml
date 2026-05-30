@@ -1,0 +1,139 @@
+name: Build TDLib Android
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android-tdlib:
+    runs-on: ubuntu-latest
+
+    env:
+      ANDROID_NDK_VERSION: 27.0.12077973
+      TDLIB_VERSION: v1.8.49
+
+    steps:
+
+      - name: Checkout TDLib
+        uses: actions/checkout@v4
+        with:
+          repository: tdlib/td
+          ref: ${{ env.TDLIB_VERSION }}
+          path: td
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+
+          sudo apt install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            gperf \
+            php \
+            wget \
+            unzip \
+            curl \
+            git \
+            zip \
+            zlib1g-dev \
+            openjdk-17-jdk
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls $ANDROID_HOME/ndk
+
+      - name: Build OpenSSL
+        working-directory: td/example/android
+        run: |
+          chmod +x build-openssl.sh
+          ./build-openssl.sh
+
+      - name: Build TDLib
+        working-directory: td/example/android
+        run: |
+          chmod +x build-tdlib.sh
+
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}"
+
+          TDLIB_INTERFACE=Java ./build-tdlib.sh
+
+      - name: Prepare release structure
+        run: |
+
+          mkdir -p release/java/org/drinkless/tdlib
+
+          mkdir -p release/jniLibs/arm64-v8a
+          mkdir -p release/jniLibs/armeabi-v7a
+          mkdir -p release/jniLibs/x86
+          mkdir -p release/jniLibs/x86_64
+
+      - name: Collect Java bindings
+        run: |
+
+          find td -name TdApi.java \
+            -exec cp {} release/java/org/drinkless/tdlib/ \;
+
+          find td -name Client.java \
+            -exec cp {} release/java/org/drinkless/tdlib/ \;
+
+      - name: Collect JNI libraries
+        run: |
+
+          find td -name libtdjni.so | while read file
+          do
+            abi=$(basename "$(dirname "$file")")
+
+            case "$abi" in
+              arm64-v8a|armeabi-v7a|x86|x86_64)
+                cp "$file" "release/jniLibs/$abi/"
+                ;;
+            esac
+          done
+
+      - name: Save build metadata
+        run: |
+
+          git -C td rev-parse HEAD > release/COMMIT.txt
+          git -C td describe --tags > release/VERSION.txt
+
+      - name: Verify generated files
+        run: |
+
+          echo "===== JAVA FILES ====="
+          find release/java
+
+          echo "===== JNI FILES ====="
+          find release/jniLibs
+
+      - name: Create ZIP
+        run: |
+
+          cd release
+          zip -r ../tdlib-android.zip .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdlib-android
+          path: tdlib-android.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tdlib-${{ github.run_number }}
+          name: TDLib Android Build ${{ github.run_number }}
+          files: tdlib-android.zip
