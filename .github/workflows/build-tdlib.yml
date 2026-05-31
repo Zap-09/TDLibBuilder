@@ -88,6 +88,10 @@ jobs:
     # -----------------------------
     # 8. STEP 2: fetch SDK (FIX FOR YOUR ERROR)
     # -----------------------------
+    - name: Clean SDK directory
+      run: |
+        rm -rf $HOME/android-sdk
+
     - name: Fetch SDK
       working-directory: td/example/android
       run: |
